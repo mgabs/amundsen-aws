@@ -7,12 +7,14 @@ import * as iam from "aws-cdk-lib/aws-iam";
 import * as logs from "aws-cdk-lib/aws-logs";
 import * as neptune_alpha from "@aws-cdk/aws-neptune-alpha";
 import * as neptune from "aws-cdk-lib/aws-neptune";
-import * as osearch from "aws-cdk-lib/aws-opensearchservice";
 import * as s3 from "aws-cdk-lib/aws-s3";
 
 import { AmundsenVpc } from "./constructs/amundsen-vpc";
 import { Construct } from "constructs";
-import { EsRoleConstruct } from "./constructs/service-role";
+import { ServiceLinkedRole } from "./constructs/service-linked-role";
+import { IamPolicyStatement } from "./constructs/iam-policy";
+import { OpenSearch } from "./constructs/open-search";
+import { NeptuneCluster } from "./constructs/neptune-construct";
 
 export class AmundsenStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
@@ -23,16 +25,20 @@ export class AmundsenStack extends cdk.Stack {
     const amundsenSearchPort = 5001;
     const amundsenMetadataPort = 5002;
 
-    // Iam role
-    const osServiceRole = new EsRoleConstruct(this, "ElasticServiceRole");
     // OpenSearch Service Role
     // will succeseed first time only
-    const slr = new iam.CfnServiceLinkedRole(this, "Service Linked Role", {
-      awsServiceName: "es.amazonaws.com",
-    });
+    const osServiceLinkedRole = new ServiceLinkedRole(
+      this,
+      "ElasticServiceRole",
+      {
+        awsServiceName: "es.amazonaws.com",
+        description: "es service linked role",
+      }
+    );
 
     // Vpc setup
-    const amundsenVpc = new AmundsenVpc(this, "AmundsenVpc").vpc;
+    const amundsenVpc = new AmundsenVpc(this, "AmundsenVpc");
+
     // Get lists of Subnets by type
     var neptunePublicSubnets = amundsenVpc.publicSubnets;
     var neptunePrivateSubnets = amundsenVpc.privateSubnets;
@@ -44,23 +50,16 @@ export class AmundsenStack extends cdk.Stack {
     };
 
     const accessPolicies: iam.PolicyStatement[] = [
-      new iam.PolicyStatement({
-        resources: [`arn:aws:es:${this.region}:${this.account}:domain/*`],
-        actions: ["es:*"],
-        effect: iam.Effect.ALLOW,
-        principals: [new iam.AnyPrincipal()],
+      new IamPolicyStatement(this, "AmundsenPolicy", {
+        region: this.region,
+        account: this.account,
       }),
     ];
 
     // Elastic Search
-    const openSearch = new osearch.Domain(this, "elasticsearch", {
-      // this seems to be the newest compatible
-      version: osearch.EngineVersion.ELASTICSEARCH_6_8,
-      enableVersionUpgrade: true,
+    const openSearch = new OpenSearch(this, "elasticSearch", {
       vpc: amundsenVpc,
-      vpcSubnets: [{ subnetType: ec2.SubnetType.PRIVATE_ISOLATED }],
-      removalPolicy: cdk.RemovalPolicy.DESTROY,
-      accessPolicies,
+      accessPolicies: accessPolicies,
     });
 
     const neptuneRole = new iam.Role(this, "NeptuneRole", {
@@ -93,26 +92,14 @@ export class AmundsenStack extends cdk.Stack {
       },
     });
 
-    const neptuneCluster = new neptune_alpha.DatabaseCluster(
-      this,
-      "NeptuneCluster",
-      {
-        dbClusterName: "MyGraphDB",
-        vpc: amundsenVpc,
-        vpcSubnets: neptuneSubnets,
-        instanceType: neptune_alpha.InstanceType.R5_LARGE,
-        clusterParameterGroup: clusterParams,
-        parameterGroup: dbParams,
-        associatedRoles: [neptuneRole],
-        iamAuthentication: true,
-        deletionProtection: false, // Not recommended for production clusters. This is enabled to easily delete the example stack.
-        removalPolicy: cdk.RemovalPolicy.DESTROY, // Not recommended for production clusters. This is enabled to easily delete the example stack.
-      }
-    );
-
-    neptuneCluster.connections.allowDefaultPortFrom(
-      ec2.Peer.ipv4(amundsenVpc.vpcCidrBlock)
-    );
+    const neptuneCluster = new NeptuneCluster(this, "NeptuneCluster", {
+      name: "MyGraphDB",
+      vpc: amundsenVpc,
+      subnets: neptuneSubnets,
+      clusterParamGroup: clusterParams,
+      paramGroup: dbParams,
+      associatedRoles: [neptuneRole],
+    });
 
     const taskDefinition = new ecs.FargateTaskDefinition(
       this,
@@ -249,13 +236,3 @@ export class AmundsenStack extends cdk.Stack {
     });
   }
 }
-
-// const roleStack = new SLRStack(app, "amudsen-dev-es-slr", { env: devEnv });
-
-// const vpcStack = new VPCStack(app, "amudsen-dev-vpc", { env: devEnv });
-
-// const serviceStack = new AmundsenStack(app, "amudsen-dev-stack", {
-//   env: devEnv,
-//   vpc: vpcStack.vpc,
-// });
-// serviceStack.addDependency(roleStack);

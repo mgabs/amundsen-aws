@@ -2,17 +2,15 @@ import * as ec2 from "aws-cdk-lib/aws-ec2";
 import * as cdk from "aws-cdk-lib";
 import { Construct } from "constructs";
 
-export class AmundsenVpc extends Construct {
-  public vpc: ec2.Vpc;
+export class AmundsenVpc extends ec2.Vpc {
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
-    super(scope, id);
-
-    this.vpc = new ec2.Vpc(this, "NeptuneVpc", {
+    super(scope, id, {
       cidr: "10.192.0.0/16",
       maxAzs: 2,
       natGateways: 0,
       enableDnsHostnames: true,
       enableDnsSupport: true,
+      vpcName: "AmundsenVPC",
       /**
        * Each entry in this list configures a Subnet Group
        *
@@ -33,7 +31,5 @@ export class AmundsenVpc extends Construct {
         },
       ],
     });
-
-    cdk.Tags.of(this.vpc).add("Name", "AmundsenVPC");
   }
 }
