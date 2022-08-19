@@ -1,20 +1,18 @@
 import * as cdk from "aws-cdk-lib";
 import * as ec2 from "aws-cdk-lib/aws-ec2";
-import * as ecs from "aws-cdk-lib/aws-ecs";
 import * as ecsp from "aws-cdk-lib/aws-ecs-patterns";
 import * as elbv2 from "aws-cdk-lib/aws-elasticloadbalancingv2";
 import * as iam from "aws-cdk-lib/aws-iam";
 import * as logs from "aws-cdk-lib/aws-logs";
-import * as neptune from "aws-cdk-lib/aws-neptune";
-
-import { FargateTaskDefinition } from "./constructs/fargate-construct";
-import { AmundsenVpc } from "./constructs/amundsen-vpc";
 import { Construct } from "constructs";
-import { ServiceLinkedRole } from "./constructs/service-linked-role";
-import { IamPolicyStatement } from "./constructs/iam-policy";
-import { OpenSearch } from "./constructs/open-search";
+
+import { AmundsenVpc } from "./constructs/amundsen-vpc";
 import { Bucket } from "./constructs/bucket-construct";
+import { AmundsenFargate } from "./constructs/fargate-construct";
+import { IamPolicyStatement } from "./constructs/iam-policy";
 import { NeptuneCluster } from "./constructs/neptune-construct";
+import { OpenSearch } from "./constructs/open-search";
+import { ServiceLinkedRole } from "./constructs/service-linked-role";
 
 export class AmundsenStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
@@ -81,97 +79,20 @@ export class AmundsenStack extends cdk.Stack {
       associatedRoles: [neptuneRole],
     });
 
-    const taskDefinition = new FargateTaskDefinition(
-      this,
-      "amundsen-task-def",
-      {
-        cpu: 1024,
-        memoryLimitMib: 4096,
-      }
-    );
     const logGroup = new logs.LogGroup(this, this.stackName);
-    taskDefinition.addContainer("amundsenfrontend", {
-      image: ecs.ContainerImage.fromRegistry(
-        "amundsendev/amundsen-frontend:3.7.0"
-      ),
-      containerName: "frontend",
-      memoryLimitMiB: 1024,
-      portMappings: [
-        {
-          containerPort: amundsenBasePort,
-        },
-      ],
-      environment: {
-        LOG_LEVEL: "DEBUG",
-        SEARCHSERVICE_BASE: `http://localhost:${amundsenSearchPort}`,
-        METADATASERVICE_BASE: `http://localhost:${amundsenMetadataPort}`,
-        FRONTEND_SVC_CONFIG_MODULE_CLASS:
-          "amundsen_application.config.TestConfig",
-      },
-      logging: new ecs.AwsLogDriver({
-        logGroup,
-        streamPrefix: "amundsenfrontend",
-      }),
+
+    const amundsenFargate = new AmundsenFargate(this, "AmundsenFargate", {
+      amundsenBasePort,
+      amundsenSearchPort,
+      amundsenMetadataPort,
+      logGroup,
+      region: this.region,
+      bucket,
+      neptuneCluster,
+      openSearchDomainEndpoint: openSearch.domainEndpoint,
     });
 
-    taskDefinition.addContainer("amundsen-search", {
-      image: ecs.ContainerImage.fromRegistry(
-        "amundsendev/amundsen-search:2.5.1"
-      ),
-      containerName: "search",
-      memoryLimitMiB: 1024,
-      portMappings: [
-        {
-          containerPort: amundsenSearchPort,
-        },
-      ],
-      environment: {
-        LOG_LEVEL: "DEBUG",
-        PROXY_ENDPOINT: `https://${openSearch.domainEndpoint}`,
-        PROXY_CLIENT: "ELASTICSEARCH",
-        PORT: `${amundsenSearchPort}`,
-        PROXY_PORT: "443",
-        // these are required, else you'll have a bad day
-        CREDENTIALS_PROXY_USER: "",
-        CREDENTIALS_PROXY_PASSWORD: "",
-      },
-      logging: new ecs.AwsLogDriver({
-        logGroup,
-        streamPrefix: "amundsensearch",
-      }),
-    });
-
-    const cfnNeptune = neptuneCluster.node.defaultChild as neptune.CfnDBCluster;
-
-    taskDefinition.addContainer("amundsen-metadata", {
-      image: ecs.ContainerImage.fromRegistry(
-        "amundsendev/amundsen-metadata:3.5.0"
-      ),
-      containerName: "metadata",
-      memoryLimitMiB: 1024,
-      portMappings: [
-        {
-          containerPort: amundsenMetadataPort,
-        },
-      ],
-      environment: {
-        LOG_LEVEL: "DEBUG",
-        METADATA_SVC_CONFIG_MODULE_CLASS:
-          "metadata_service.config.NeptuneConfig",
-        AWS_REGION: this.region,
-        S3_BUCKET_NAME: bucket.bucketName,
-        IGNORE_NEPTUNE_SHARD: "True",
-        PROXY_CLIENT: "NEPTUNE",
-        PROXY_HOST: `wss://${neptuneCluster.clusterEndpoint.socketAddress}/gremlin`,
-        PROXY_PORT: cfnNeptune.attrPort,
-        PROXY_ENCRYPTED: "True",
-        PROXY_VALIDATE_SSL: "False",
-      },
-      logging: new ecs.AwsLogDriver({
-        logGroup,
-        streamPrefix: "amundsenmetadata",
-      }),
-    });
+    const taskDefinition = amundsenFargate.taskDefinition;
 
     const sg = new ec2.SecurityGroup(this, "clusterSG", { vpc: amundsenVpc });
     sg.addIngressRule(

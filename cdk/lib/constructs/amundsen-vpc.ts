@@ -19,15 +19,20 @@ export class AmundsenVpc extends ec2.Vpc {
        * PUBLIC..: Subnet connected to the Internet.
        */
       subnetConfiguration: [
+        // {
+        //   subnetType: ec2.SubnetType.PRIVATE_WITH_NAT,
+        //   name: "Private",
+        //   cidrMask: 24,
+        // },
         {
-          cidrMask: 24,
-          name: "db",
           subnetType: ec2.SubnetType.PRIVATE_ISOLATED,
+          name: "Isolated",
+          cidrMask: 24,
         },
         {
-          cidrMask: 24,
-          name: "dmz",
           subnetType: ec2.SubnetType.PUBLIC,
+          name: "Public",
+          cidrMask: 24,
         },
       ],
     });
