@@ -5,15 +5,15 @@ import * as ecsp from "aws-cdk-lib/aws-ecs-patterns";
 import * as elbv2 from "aws-cdk-lib/aws-elasticloadbalancingv2";
 import * as iam from "aws-cdk-lib/aws-iam";
 import * as logs from "aws-cdk-lib/aws-logs";
-import * as neptune_alpha from "@aws-cdk/aws-neptune-alpha";
 import * as neptune from "aws-cdk-lib/aws-neptune";
-import * as s3 from "aws-cdk-lib/aws-s3";
 
+import { FargateTaskDefinition } from "./constructs/fargate-construct";
 import { AmundsenVpc } from "./constructs/amundsen-vpc";
 import { Construct } from "constructs";
 import { ServiceLinkedRole } from "./constructs/service-linked-role";
 import { IamPolicyStatement } from "./constructs/iam-policy";
 import { OpenSearch } from "./constructs/open-search";
+import { Bucket } from "./constructs/bucket-construct";
 import { NeptuneCluster } from "./constructs/neptune-construct";
 
 export class AmundsenStack extends cdk.Stack {
@@ -66,50 +66,29 @@ export class AmundsenStack extends cdk.Stack {
       assumedBy: new iam.ServicePrincipal("rds.amazonaws.com"),
     });
 
-    const bucket = new s3.Bucket(this, "amundsen-bucket", {
-      bucketName: `amundsenexample-${this.region}-${this.account}`,
-      removalPolicy: cdk.RemovalPolicy.DESTROY,
-      encryption: s3.BucketEncryption.S3_MANAGED,
+    const bucket = new Bucket(this, "amundsen-bucket", {
+      region: this.region,
+      account: this.account,
     });
     bucket.grantReadWrite(neptuneRole);
 
-    // Create Neptune Cluster
-    const clusterParams = new neptune_alpha.ClusterParameterGroup(
-      this,
-      "ClusterParams",
-      {
-        description: "Cluster parameter group",
-        parameters: {
-          neptune_enable_audit_log: "1",
-        },
-      }
-    );
-
-    const dbParams = new neptune_alpha.ParameterGroup(this, "DbParams", {
-      description: "Db parameter group",
-      parameters: {
-        neptune_query_timeout: "120000",
-      },
-    });
-
     const neptuneCluster = new NeptuneCluster(this, "NeptuneCluster", {
-      name: "MyGraphDB",
+      name: "AmundsenGraphDb",
       vpc: amundsenVpc,
+      query_timeout: "120000",
+      enable_audit_log: "1",
       subnets: neptuneSubnets,
-      clusterParamGroup: clusterParams,
-      paramGroup: dbParams,
       associatedRoles: [neptuneRole],
     });
 
-    const taskDefinition = new ecs.FargateTaskDefinition(
+    const taskDefinition = new FargateTaskDefinition(
       this,
       "amundsen-task-def",
       {
         cpu: 1024,
-        memoryLimitMiB: 4096,
+        memoryLimitMib: 4096,
       }
     );
-
     const logGroup = new logs.LogGroup(this, this.stackName);
     taskDefinition.addContainer("amundsenfrontend", {
       image: ecs.ContainerImage.fromRegistry(
