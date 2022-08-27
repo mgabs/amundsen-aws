@@ -12,14 +12,17 @@ export interface OpenSearchProps extends cdk.StackProps {
 export class OpenSearch extends osearch.Domain {
   constructor(scope: Construct, id: string, props: OpenSearchProps) {
     super(scope, id, {
-      // this seems to be the newest compatible
       // TODO: Check newer OpenSearch Version
       version: osearch.EngineVersion.ELASTICSEARCH_6_8,
+      zoneAwareness: { availabilityZoneCount: 2, enabled: true },
       enableVersionUpgrade: true,
       vpc: props.vpc,
-      vpcSubnets: [{ subnetType: ec2.SubnetType.PRIVATE_ISOLATED }],
+      vpcSubnets: [{ subnetType: ec2.SubnetType.PRIVATE_WITH_NAT }],
       removalPolicy: cdk.RemovalPolicy.DESTROY,
       accessPolicies: props.accessPolicies,
+      capacity: {
+        dataNodes: 2,
+      },
     });
   }
 }

@@ -7,7 +7,7 @@ export class AmundsenVpc extends ec2.Vpc {
     super(scope, id, {
       cidr: "10.192.0.0/16",
       maxAzs: 2,
-      natGateways: 0,
+      // natGateways: 0,
       enableDnsHostnames: true,
       enableDnsSupport: true,
       vpcName: "AmundsenVPC",
@@ -20,14 +20,19 @@ export class AmundsenVpc extends ec2.Vpc {
        */
       subnetConfiguration: [
         {
+          subnetType: ec2.SubnetType.PRIVATE_WITH_NAT,
+          name: "Private",
           cidrMask: 24,
-          name: "db",
-          subnetType: ec2.SubnetType.PRIVATE_ISOLATED,
         },
         {
+          subnetType: ec2.SubnetType.PRIVATE_ISOLATED,
+          name: "Isolated",
           cidrMask: 24,
-          name: "dmz",
+        },
+        {
           subnetType: ec2.SubnetType.PUBLIC,
+          name: "Public",
+          cidrMask: 24,
         },
       ],
     });
