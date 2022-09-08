@@ -8,4 +8,4 @@ The project was inspired by https://github.com/petehanssens/amundsen-cdk-templat
 
 ## Ref.
 
-amundsen.io
+[amundsen.io](https://www.amundsen.io/)
