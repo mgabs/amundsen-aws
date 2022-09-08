@@ -1,6 +1,6 @@
-# Amundsen-AWS - WIP
+# Amundsen-AWS
 
-Amundsen on AWS using OpenSearch & Neptune.
+Implements Amundsen (https://www.amundsen.io/) on AWS using OpenSearch & Neptune.
 
 The Project implements Amundsen on AWS using CDK v2.
 
