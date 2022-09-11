@@ -1,4 +1,12 @@
-# Amundsen-AWS
+# Amundsen
+
+Exploring Amundsen and different deployment scenarios.
+
+## Amundsen on Docker
+
+Local implementation featuring Amundsen's own docker images
+
+## Amundsen on AWS Neptune
 
 Implements Amundsen (https://www.amundsen.io/) on AWS using OpenSearch & Neptune.
 
